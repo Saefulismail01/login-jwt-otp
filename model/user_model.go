@@ -21,3 +21,4 @@ type AuthResponse struct {
 	Token string     `json:"token"`
 	User  Users      `json:"user"`
 }
+

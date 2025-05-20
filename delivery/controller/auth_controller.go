@@ -1,10 +1,11 @@
 package controller
 
 import (
-	"net/http"
+	"login-jwt-otp/model"
 	"login-jwt-otp/model/dto"
 	"login-jwt-otp/usecase"
 	"login-jwt-otp/utils/service"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,95 +34,97 @@ func (ac *AuthController) Route() {
 
 // Register handles user registration and sends OTP
 func (a *AuthController) Register(c *gin.Context) {
-	var input struct {
-		Name      string `json:"name"`
-		Email     string `json:"email"`
-		Password  string `json:"password"`
-		BirthYear int    `json:"birth_year"`
-		Phone     string `json:"phone"`
-	}
+	var req dto.RegisterRequest
 
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Message: "Bad Request",
-			Error:   "invalid input",
-		})
-		return
-	}
-
-	// Generate OTP
-	if _, err := a.UserUsecase.GenerateOTP(input.Email); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Message: "Failed to generate OTP",
+			Message: "Invalid request",
 			Error:   err.Error(),
 		})
 		return
 	}
 
-	// Return OTP information
-	c.JSON(http.StatusOK, gin.H{
-		"message": "OTP sent successfully",
-		"email":   input.Email,
+	// Check if email exists
+	exists, err := a.AuthUsecase.IsEmailExists(req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Message: "Failed to process request",
+			Error:   "internal server error",
+		})
+		return
+	}
+
+	if exists {
+		c.JSON(http.StatusConflict, dto.ErrorResponse{
+			Message: "Registration failed",
+			Error:   "email already registered",
+		})
+		return
+	}
+
+	// Generate and send OTP
+	_, err = a.UserUsecase.GenerateOTP(req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
+			Message: "Failed to process request",
+			Error:   "failed to generate OTP",
+		})
+		return
+	}
+
+	// Return success response without sensitive data
+	c.JSON(http.StatusOK, dto.RegisterResponse{
+		Message: "OTP sent successfully. Please check your email.",
+		Email:   req.Email,
 	})
 }
 
 // VerifyOtp handles OTP verification and completes registration
 func (a *AuthController) VerifyOtp(c *gin.Context) {
-	var input struct {
-		Email string `json:"email"`
-		Otp   string `json:"otp"`
-		Name  string `json:"name"`
-		Password  string `json:"password"`
-		BirthYear int    `json:"birth_year"`
-		Phone     string `json:"phone"`
-	}
+	var req dto.VerifyOTPRequest
 
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
-			Message: "Bad Request",
-			Error:   "invalid input",
-		})
-		return
-	}
-
-	// Verify OTP and create user
-	user, err := a.UserUsecase.VerifyOTP(input.Email, input.Otp)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
-			Message: "Invalid OTP",
+			Message: "Invalid request",
 			Error:   err.Error(),
 		})
 		return
 	}
 
-	// Update user details
-	user.Name = input.Name
-	user.Phone = input.Phone
-	user.BirthYear = input.BirthYear
-	user.Role = "user"
+	// Verify OTP
+	_, err := a.UserUsecase.VerifyOTP(req.Email, req.OTP)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Message: "Verification failed",
+			Error:   err.Error(),
+		})
+		return
+	}
 
-	// Update password
-	hashedPassword, err := service.HashPassword(input.Password)
+	// Create user with verified email
+	newUser := model.Users{
+		Name:      req.Name,
+		Email:     req.Email,
+		BirthYear: req.BirthYear,
+		Phone:     req.Phone,
+		Role:      "USER",
+	}
+
+	// Register the user
+	authResp, err := a.AuthUsecase.Register(newUser, req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Message: "Failed to encrypt password",
-			Error:   "gagal mengenkripsi password",
-		})
-		return
-	}
-	user.PasswordHash = hashedPassword
-
-	// Save updated user
-	updatedUser, err := a.AuthUsecase.Register(user, input.Password)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
 			Message: "Registration failed",
-			Error:   err.Error(),
+			Error:   "failed to create user account: " + err.Error(),
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, updatedUser)
+	// Return success response with token
+	c.JSON(http.StatusOK, dto.Response{
+		Message: "Registration successful",
+		Data:    authResp,
+	})
 }
 
 func (a *AuthController) Login(c *gin.Context) {
@@ -146,5 +149,8 @@ func (a *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, authResp)
+	c.JSON(http.StatusOK, dto.Response{
+		Message: "Login successful",
+		Data:    authResp,
+	})
 }
