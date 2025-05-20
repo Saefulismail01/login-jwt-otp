@@ -1,14 +1,16 @@
 # Login JWT OTP
 
-Aplikasi autentikasi dengan JWT dan OTP menggunakan Golang dan PostgreSQL.
+Aplikasi autentikasi dengan JWT dan OTP menggunakan Golang dan PostgreSQL. Aplikasi ini menyediakan sistem registrasi dengan verifikasi OTP melalui email dan login menggunakan JWT untuk autentikasi.
 
 ## Fitur Utama
 
-- Sistem autentikasi dengan JWT
-- Registrasi pengguna dengan verifikasi OTP
-- Login pengguna
-- Enkripsi password menggunakan bcrypt
-- Validasi email dan OTP
+- ✅ Registrasi pengguna dengan verifikasi OTP
+- ✅ Verifikasi OTP untuk aktivasi akun
+- ✅ Login menggunakan JWT
+- ✅ Validasi email dan password
+- ✅ Enkripsi password menggunakan bcrypt
+- ✅ Manajemen sesi dengan JWT
+- ✅ Rate limiting untuk mencegah spam OTP
 
 ## Struktur Proyek
 
@@ -77,80 +79,176 @@ go run main.go
 
 ### API Endpoints
 
-#### Registrasi
-- POST `/api/auth/register`
-  ```json
-  {
-    "name": "string",
-    "email": "string",
-    "password": "string",
-    "birth_year": integer,
-    "phone": "string"
-  }
-  ```
-  
-  Response:
-  ```json
-  {
-    "message": "OTP sent successfully",
-    "email": "string"
-  }
-  ```
+### 1. Registrasi
 
-#### Verifikasi OTP
-- POST `/api/auth/verify-otp`
+Mengirimkan data registrasi dan menerima OTP melalui email.
+
+- **URL**: `POST /api/auth/register`
+- **Request Body**:
   ```json
   {
-    "email": "string",
-    "otp": "string",
-    "name": "string",
-    "password": "string",
-    "birth_year": integer,
-    "phone": "string"
+    "name": "Deny Caknan",
+    "email": "deny@example.com",
+    "password": "securePassword123",
+    "birth_year": 2002,
+    "phone": "081234567890"
   }
   ```
-  
-  Response:
+- **Response Success (200 OK)**:
+  ```json
+  {
+    "message": "OTP sent successfully. Please check your email.",
+    "email": "deny@example.com"
+  }
+  ```
+- **Error Response**:
+  - 400: Invalid request data
+  - 409: Email already registered
+  - 500: Internal server error
+
+### 2. Verifikasi OTP
+
+Memverifikasi OTP dan menyelesaikan proses registrasi.
+
+- **URL**: `POST /api/auth/verify-otp`
+- **Request Body**:
+  ```json
+  {
+    "email": "deny@example.com",
+    "otp": "123456",
+    "name": "Deny Caknan",
+    "password": "securePassword123",
+    "birth_year": 2002,
+    "phone": "081234567890"
+  }
+  ```
+- **Response Success (200 OK)**:
   ```json
   {
     "message": "Registration successful",
-    "user": {
-      "id": integer,
-      "name": "string",
-      "email": "string",
-      "role": "string"
+    "data": {
+      "user": {
+        "id": 1,
+        "name": "Deny Caknan",
+        "email": "deny@example.com",
+        "birth_year": 2002,
+        "phone": "081234567890",
+        "role": "USER"
+      },
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
     }
   }
   ```
+- **Error Response**:
+  - 400: Invalid OTP or request data
+  - 401: OTP expired or invalid
+  - 500: Internal server error
 
-#### Login
-- POST `/api/auth/login`
+### 3. Login
+
+Login pengguna dengan email dan password.
+
+- **URL**: `POST /api/auth/login`
+- **Request Body**:
   ```json
   {
-    "email": "string",
-    "password": "string"
+    "email": "deny@example.com",
+    "password": "securePassword123"
   }
   ```
-  
-  Response:
+- **Response Success (200 OK)**:
   ```json
   {
-    "token": "string",
-    "user": {
-      "id": integer,
-      "name": "string",
-      "email": "string",
-      "role": "string"
+    "message": "Login successful",
+    "data": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "id": 1,
+        "name": "Deny Caknan",
+        "email": "deny@example.com",
+        "role": "USER"
+      }
     }
   }
   ```
+- **Error Response**:
+  - 400: Invalid request data
+  - 401: Invalid credentials
+  - 500: Internal server error
+
+## Alur Registrasi
+
+1. Pengguna mengirim data registrasi ke `/api/auth/register`
+2. Sistem mengirim OTP ke email pengguna
+3. Pengguna memverifikasi OTP dengan mengirim data lengkap ke `/api/auth/verify-otp`
+4. Jika OTP valid, akun pengguna dibuat dan token JWT dikembalikan
+5. Pengguna dapat login menggunakan email dan password yang telah didaftarkan
 
 ## Teknologi
 
-- Backend: Golang
-- Framework: Gin
-- Database: PostgreSQL
-- Authentication: JWT
-- OTP: Custom implementation
-- Password Hashing: bcrypt
+- **Bahasa Pemrograman**: Go 1.23.0+
+- **Framework Web**: Gin
+- **Database**: PostgreSQL
+- **Autentikasi**: JWT (JSON Web Tokens)
+- **Keamanan**:
+  - Bcrypt untuk hashing password
+  - OTP dengan masa berlaku 10 menit
+  - Rate limiting untuk mencegah spam
+- **Lainnya**:
+  - Viper untuk manajemen konfigurasi
+  - GORM untuk ORM
+  - Validator untuk validasi input
+
+## Pengembangan
+
+### Menjalankan Aplikasi
+
+1. Pastikan PostgreSQL berjalan
+2. Buat file `.env` dari `.env.example`
+3. Jalankan migrasi database:
+   ```bash
+   go run migrations/migrate.go
+   ```
+4. Jalankan aplikasi:
+   ```bash
+   go run main.go
+   ```
+
+### Testing
+
+```bash
+go test -v ./...
+```
+
+### Environment Variables
+
+Salin `.env.example` ke `.env` dan sesuaikan konfigurasi:
+
+```
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=your_password
+DB_NAME=login_jwt_otp
+DB_DRIVER=postgres
+
+# Server
+API_PORT=8080
+
+# JWT
+JWT_SECRET=your_secure_secret
+JWT_EXPIRY=24h
+
+# Aplikasi
+APP_NAME=Login JWT OTP
+```
+
+## Kontribusi
+
+1. Fork repository
+2. Buat branch fitur (`git checkout -b fitur/namafitur`)
+3. Commit perubahan (`git commit -m 'Menambahkan fitur baru'`)
+4. Push ke branch (`git push origin fitur/namafitur`)
+5. Buat Pull Request
 
